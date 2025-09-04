@@ -3,14 +3,14 @@ FROM python:3.9-slim
 # 設定工作目錄
 WORKDIR /app
 
-# 安裝 pipenv
-RUN pip install pipenv
+# 安裝 pipenv 和 click
+RUN pip install pipenv click
 
 # 複製 Pipfile 和 Pipfile.lock (如果有)
 COPY Pipfile* ./
 
 # 安裝依賴 (不建立虛擬環境)
-RUN pipenv install --system --deploy
+RUN pipenv install --system
 
 # 複製應用程式代碼
 COPY main.py ./
