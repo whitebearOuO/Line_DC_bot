@@ -61,6 +61,16 @@
    pipenv run python main.py
    ```
 
+## Docker 部署
+
+除了常規的 Python 安裝方式外，您也可以使用 Docker 來部署此機器人。
+
+### 使用 Docker Compose 部署
+
+1. 確保您已安裝 [Docker](https://www.docker.com/get-started) 和 [Docker Compose](https://docs.docker.com/compose/install/)
+
+2. 複製專案並進入專案目錄：
+
 ## Discord 機器人設定
 
 1. 前往 [Discord Developer Portal](https://discord.com/developers/applications)

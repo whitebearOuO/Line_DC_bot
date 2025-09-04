@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  line-discord-bot:
+    build: .
+    container_name: line-discord-bot
+    volumes:
+      - ./.env:/app/.env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
