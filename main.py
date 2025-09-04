@@ -6,14 +6,10 @@ import time
 from dotenv import load_dotenv
 from flask import Flask, request, abort
 
-# Line Bot SDK v2 (為了向後兼容)
+# Line Bot SDK v2
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, ImageMessage, VideoMessage, AudioMessage, FileMessage, StickerMessage, TextSendMessage
-
-# Line Bot SDK v3 (用於獲取機器人資訊)
-from linebot.v3.messaging import MessagingApi
-from linebot.v3.messaging import Configuration
 
 import discord
 from discord import app_commands
@@ -46,10 +42,6 @@ LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
 # 初始化 Line API
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
-
-# 初始化 Line v3 API
-line_bot_v3_config = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
-line_bot_v3_api = MessagingApi(line_bot_v3_config)
 
 # 初始化 Flask
 app = Flask(__name__)
@@ -96,20 +88,13 @@ async def on_ready():
     
     # 獲取Line機器人的個人資料
     try:
-        # 使用 Line Bot SDK v3 API 獲取機器人資訊
-        bot_profile = line_bot_v3_api.get_bot_info()
+        bot_profile = line_bot_api.get_bot_info()
         line_bot_id = bot_profile.user_id
         logger.info(f"Line機器人ID: {line_bot_id}")
     except Exception as e:
-        logger.error(f"獲取Line機器人資訊時發生錯誤: {e}")
-        # 如果 v3 API 失敗，嘗試使用舊版 API（作為備用）
-        try:
-            bot_profile = line_bot_api.get_bot_info()
-            line_bot_id = bot_profile.user_id
-            logger.info(f"使用舊版API獲取Line機器人ID: {line_bot_id}")
-        except Exception as e2:
-            logger.error(f"使用舊版API獲取Line機器人資訊也失敗: {e2}")
-            line_bot_id = None
+        logger.warning(f"獲取Line機器人資訊時發生錯誤: {e}")
+        line_bot_id = None
+        logger.info("將繼續運行，但無法過濾機器人自己的訊息")
 
 # 獲取用戶顯示名稱的函數
 def get_user_display_name(event):
@@ -205,7 +190,7 @@ def handle_text_message(event):
     user_id = event.source.user_id
     
     # 檢查是否為機器人自己發送的訊息
-    if user_id == line_bot_id:
+    if line_bot_id and user_id == line_bot_id:
         logger.info("忽略Line機器人自己發送的訊息")
         return
     
@@ -213,8 +198,8 @@ def handle_text_message(event):
     user_name = get_user_display_name(event)
     message = event.message.text
     
-    # 轉發訊息到Discord
-    send_to_discord(f"**{user_name}**: {message}")
+    # 轉發訊息到Discord (使用換行格式)
+    send_to_discord(f"**{user_name}**:\n{message}")
 
 # Line圖片訊息處理
 @handler.add(MessageEvent, message=ImageMessage)
@@ -222,7 +207,7 @@ def handle_image_message(event):
     user_id = event.source.user_id
     
     # 檢查是否為機器人自己發送的訊息
-    if user_id == line_bot_id:
+    if line_bot_id and user_id == line_bot_id:
         logger.info("忽略Line機器人自己發送的圖片")
         return
     
@@ -248,7 +233,7 @@ def handle_image_message(event):
     except Exception as e:
         logger.error(f"處理圖片時發生錯誤: {e}")
         # 發送錯誤訊息到Discord
-        send_to_discord(f"**{user_name}** 發送了一張圖片，但處理失敗: {str(e)}")
+        send_to_discord(f"**{user_name}**:\n發送了一張圖片，但處理失敗: {str(e)}")
 
 # Line貼圖訊息處理
 @handler.add(MessageEvent, message=StickerMessage)
@@ -256,7 +241,7 @@ def handle_sticker_message(event):
     user_id = event.source.user_id
     
     # 檢查是否為機器人自己發送的訊息
-    if user_id == line_bot_id:
+    if line_bot_id and user_id == line_bot_id:
         logger.info("忽略Line機器人自己發送的貼圖")
         return
     
@@ -266,7 +251,7 @@ def handle_sticker_message(event):
     # 通知Discord有貼圖訊息
     sticker_id = event.message.sticker_id
     package_id = event.message.package_id
-    send_to_discord(f"**{user_name}** 發送了一個貼圖 (貼圖ID: {sticker_id}, 包ID: {package_id})")
+    send_to_discord(f"**{user_name}**:\n發送了一個貼圖 (貼圖ID: {sticker_id}, 包ID: {package_id})")
 
 # 其他Line訊息類型處理（視頻、音訊、檔案等）
 @handler.add(MessageEvent, message=(VideoMessage, AudioMessage, FileMessage))
@@ -274,7 +259,7 @@ def handle_media_message(event):
     user_id = event.source.user_id
     
     # 檢查是否為機器人自己發送的訊息
-    if user_id == line_bot_id:
+    if line_bot_id and user_id == line_bot_id:
         logger.info("忽略Line機器人自己發送的媒體")
         return
     
@@ -292,7 +277,7 @@ def handle_media_message(event):
         message_type = "媒體"
     
     # 通知Discord有媒體訊息
-    send_to_discord(f"**{user_name}** 發送了一個{message_type}")
+    send_to_discord(f"**{user_name}**:\n發送了一個{message_type}")
 
 # 傳送訊息到Discord的函數
 def send_to_discord(message):
@@ -308,8 +293,8 @@ def send_image_to_discord(user_name, file_path):
         # 創建一個異步任務來發送圖片
         async def send_image():
             try:
-                # 發送圖片和用戶名稱
-                await discord_channel.send(f"**{user_name}** 發送了圖片：", file=discord.File(file_path))
+                # 發送圖片和用戶名稱 (使用換行格式)
+                await discord_channel.send(f"**{user_name}**:\n發送了圖片", file=discord.File(file_path))
                 # 發送後刪除臨時文件
                 os.remove(file_path)
                 logger.info(f"已成功發送圖片到Discord並刪除臨時文件: {file_path}")
