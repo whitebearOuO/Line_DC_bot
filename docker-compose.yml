@@ -6,6 +6,9 @@ services:
     container_name: line-discord-bot
     volumes:
       - ./.env:/app/.env
+      - ./temp_images:/app/temp_images
     ports:
       - "8000:8000"
     restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
