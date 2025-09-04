@@ -5,9 +5,16 @@ import tempfile
 import time
 from dotenv import load_dotenv
 from flask import Flask, request, abort
+
+# Line Bot SDK v2 (為了向後兼容)
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, ImageMessage, VideoMessage, AudioMessage, FileMessage, StickerMessage, TextSendMessage
+
+# Line Bot SDK v3 (用於獲取機器人資訊)
+from linebot.v3.messaging import MessagingApi
+from linebot.v3.messaging import Configuration
+
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -38,6 +45,10 @@ LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
 # 初始化 Line API
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+# 初始化 Line v3 API
+line_bot_v3_config = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+line_bot_v3_api = MessagingApi(line_bot_v3_config)
 
 # 初始化 Flask
 app = Flask(__name__)
@@ -81,11 +92,20 @@ async def on_ready():
     
     # 獲取Line機器人的個人資料
     try:
-        bot_profile = line_bot_api.get_bot_info()
+        # 使用 Line Bot SDK v3 API 獲取機器人資訊
+        bot_profile = line_bot_v3_api.get_bot_info()
         line_bot_id = bot_profile.user_id
         logger.info(f"Line機器人ID: {line_bot_id}")
     except Exception as e:
         logger.error(f"獲取Line機器人資訊時發生錯誤: {e}")
+        # 如果 v3 API 失敗，嘗試使用舊版 API（作為備用）
+        try:
+            bot_profile = line_bot_api.get_bot_info()
+            line_bot_id = bot_profile.user_id
+            logger.info(f"使用舊版API獲取Line機器人ID: {line_bot_id}")
+        except Exception as e2:
+            logger.error(f"使用舊版API獲取Line機器人資訊也失敗: {e2}")
+            line_bot_id = None
 
 # 定義一個斜線指令來發送訊息到Line
 @bot.tree.command(name="say_line", description="發送訊息到Line群組")
