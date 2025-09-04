@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 載入環境變數
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 # Discord 設定
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
