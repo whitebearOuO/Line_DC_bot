@@ -162,9 +162,15 @@ def handle_text_message(event):
         logger.info("忽略Line機器人自己發送的訊息")
         return
     
-    # 獲取用戶資料
-    user_profile = line_bot_api.get_profile(user_id)
-    user_name = user_profile.display_name
+    # 獲取用戶資料 - 使用 v3 API
+    try:
+        user_profile = line_bot_v3_api.get_profile(user_id=user_id)
+        user_name = user_profile.display_name
+    except Exception as e:
+        # 回退到舊版 API
+        user_profile = line_bot_api.get_profile(user_id)
+        user_name = user_profile.display_name
+    
     message = event.message.text
     
     # 轉發訊息到Discord
