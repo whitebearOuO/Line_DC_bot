@@ -23,6 +23,7 @@ import threading
 import logging
 import uuid
 from pathlib import Path
+import json
 
 # 設定日誌
 logging.basicConfig(
@@ -63,6 +64,9 @@ discord_channel = None
 
 # 存儲Line機器人自己的ID
 line_bot_id = None
+
+# 存儲群組資訊的字典
+group_info_cache = {}
 
 # 創建臨時目錄用於存儲圖片
 TEMP_DIR = Path("temp_images")
@@ -106,6 +110,49 @@ async def on_ready():
         except Exception as e2:
             logger.error(f"使用舊版API獲取Line機器人資訊也失敗: {e2}")
             line_bot_id = None
+
+# 獲取用戶顯示名稱的函數
+def get_user_display_name(event):
+    """
+    嘗試獲取用戶的顯示名稱，失敗時返回默認名稱
+    """
+    user_id = event.source.user_id
+    
+    # 檢查事件來源類型
+    if hasattr(event.source, 'type'):
+        source_type = event.source.type
+        if source_type == 'group':
+            group_id = event.source.group_id
+            
+            # 嘗試從群組資訊獲取用戶名稱
+            try:
+                # 先嘗試獲取群組成員資料
+                member_profile = line_bot_api.get_group_member_profile(group_id, user_id)
+                user_name = member_profile.display_name
+                logger.info(f"從群組獲取用戶名稱: {user_name}")
+                return user_name
+            except Exception as e:
+                logger.warning(f"無法從群組獲取用戶資料: {e}")
+                
+            # 如果群組方法失敗，嘗試直接獲取用戶資料
+            try:
+                user_profile = line_bot_api.get_profile(user_id)
+                user_name = user_profile.display_name
+                logger.info(f"從個人資料獲取用戶名稱: {user_name}")
+                return user_name
+            except Exception as e:
+                logger.warning(f"無法獲取用戶個人資料: {e}")
+                
+        elif source_type == 'user':
+            # 一對一聊天
+            try:
+                user_profile = line_bot_api.get_profile(user_id)
+                return user_profile.display_name
+            except Exception as e:
+                logger.warning(f"無法獲取一對一聊天用戶資料: {e}")
+    
+    # 如果所有方法都失敗，返回用戶ID的後6位作為顯示名稱
+    return f"Line用戶({user_id[-6:]})"
 
 # 定義一個斜線指令來發送訊息到Line
 @bot.tree.command(name="say_line", description="發送訊息到Line群組")
@@ -162,15 +209,8 @@ def handle_text_message(event):
         logger.info("忽略Line機器人自己發送的訊息")
         return
     
-    # 獲取用戶資料 - 使用 v3 API
-    try:
-        user_profile = line_bot_v3_api.get_profile(user_id=user_id)
-        user_name = user_profile.display_name
-    except Exception as e:
-        # 回退到舊版 API
-        user_profile = line_bot_api.get_profile(user_id)
-        user_name = user_profile.display_name
-    
+    # 獲取用戶顯示名稱
+    user_name = get_user_display_name(event)
     message = event.message.text
     
     # 轉發訊息到Discord
@@ -186,9 +226,8 @@ def handle_image_message(event):
         logger.info("忽略Line機器人自己發送的圖片")
         return
     
-    # 獲取用戶資料
-    user_profile = line_bot_api.get_profile(user_id)
-    user_name = user_profile.display_name
+    # 獲取用戶顯示名稱
+    user_name = get_user_display_name(event)
     message_id = event.message.id
     
     try:
@@ -221,9 +260,8 @@ def handle_sticker_message(event):
         logger.info("忽略Line機器人自己發送的貼圖")
         return
     
-    # 獲取用戶資料
-    user_profile = line_bot_api.get_profile(user_id)
-    user_name = user_profile.display_name
+    # 獲取用戶顯示名稱
+    user_name = get_user_display_name(event)
     
     # 通知Discord有貼圖訊息
     sticker_id = event.message.sticker_id
@@ -240,9 +278,8 @@ def handle_media_message(event):
         logger.info("忽略Line機器人自己發送的媒體")
         return
     
-    # 獲取用戶資料
-    user_profile = line_bot_api.get_profile(user_id)
-    user_name = user_profile.display_name
+    # 獲取用戶顯示名稱
+    user_name = get_user_display_name(event)
     
     # 判斷訊息類型
     if isinstance(event.message, VideoMessage):
