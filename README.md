@@ -1,16 +1,22 @@
 # Line-Discord 訊息轉發機器人
+> [!WARNING] 
+>請注意這個bot是copilot（使用Claude Sonnet 3.7）跟我一起生的，因為我一直寫不好Line Bot🥲。<br>
+>所以可能會有一些缺失，還請要使用的人見諒:]<br>
+<br>
+哇嗚好多群組都是用Line，但我真的好喜歡泡在DC而且不想在電腦上下載Line怎麼辦？<br>
+這個時候你就可以使用這隻搬運Bot，讓他幫你把Line的訊息偷到你的Discord群組裡面:D<br>
+<br>
+這隻搬運工主要會把Line的訊息搬到DC，但DC的訊息不會搬過去（畢竟DC一個伺服器裡面的頻道太多，這樣感覺會有點亂亂的）<br>
+但有提供斜線指令，當你懶懶不想開Line的時候，就讓這隻Bot幫你把訊息從DC搬到Line吧！
 
-這個機器人可以在 Line 群組和 Discord 頻道之間雙向轉發訊息。當有人在 Line 群組發送訊息時，機器人會自動將訊息轉發到 Discord；同樣地，Discord 用戶也可以使用斜線指令將訊息發送到 Line 群組。
+## 功能
 
-## 功能特色
-
-- **雙向訊息轉發**：Line ↔ Discord 雙向溝通
-- **多種訊息類型支援**：
+- **雙向訊息轉發**：Line ↔ Discord 雙向溝通（主要是Line to DC）
+- **支援訊息種類**：
   - 文字訊息完整轉發
   - 圖片自動下載並轉發（從 Line 到 Discord）
-  - 貼圖、影片、語音、檔案等類型通知
+  - 貼圖、影片、語音、檔案等不會完整轉發，只有提示
 - **使用者識別**：顯示發送者名稱
-- **避免訊息循環**：智能識別機器人自己的訊息，防止訊息循環轉發
 - **Discord 斜線指令**：使用 `/say_line` 將訊息發送到 Line 群組
 
 ## 快速開始 (使用 Docker)
@@ -62,7 +68,7 @@
 
 ### 使用 Ngrok 設定公開 URL
 
-Docker 容器啟動後，您需要設定一個公開的 URL 讓 Line 平台能夠發送 Webhook 事件：
+Docker 容器啟動後，需要設定一個公開的 URL 讓 Line 平台能夠發送 Webhook 事件：
 
 1. **安裝並啟動 Ngrok**：
    ```bash
@@ -185,66 +191,11 @@ docker-compose build --no-cache
 docker-compose ps
 ```
 
-## 在 Linux 伺服器上部署
-
-在 Linux 伺服器上部署與在本地機器上相同，但您可能需要考慮以下額外步驟：
-
-1. **安裝 Docker 和 Docker Compose**：
-   ```bash
-   # 在 Ubuntu/Debian 上
-   sudo apt update
-   sudo apt install docker.io docker-compose
-   
-   # 設定權限
-   sudo usermod -aG docker $USER
-   newgrp docker
-   ```
-
-2. **設定防火牆**：
-   ```bash
-   sudo ufw allow 8000/tcp
-   ```
-
-3. **設定持久的公開 URL**：
-   - 使用 Nginx + Let's Encrypt 設定 HTTPS 反向代理
-   - 或使用 [serveo.net](https://serveo.net/) 等服務
-
-4. **設定為系統服務**：
-   ```bash
-   # 創建 systemd 服務文件
-   sudo nano /etc/systemd/system/line-discord-bot.service
-   ```
-   
-   服務文件內容：
-   ```
-   [Unit]
-   Description=Line Discord Bot Docker Compose
-   Requires=docker.service
-   After=docker.service
-
-   [Service]
-   Type=oneshot
-   RemainAfterExit=yes
-   WorkingDirectory=/path/to/Line_DC_bot
-   ExecStart=/usr/bin/docker-compose up -d
-   ExecStop=/usr/bin/docker-compose down
-   TimeoutStartSec=0
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-   
-   啟用服務：
-   ```bash
-   sudo systemctl enable line-discord-bot
-   sudo systemctl start line-discord-bot
-   ```
-
 ## 注意事項
 
 - 一個機器人實例目前只支援連接一個 Line 群組和一個 Discord 頻道
 - 如要支援多個群組，需要修改程式碼或運行多個機器人實例
-- Line 的圖片、貼圖等非文字內容在轉發到 Discord 時會自動處理
+- Line 的貼圖等非文字內容在轉發到 Discord 時僅會有提示不會有內容（除了圖片）
 - 請妥善保管您的 API 密鑰，不要將 `.env` 檔案上傳到公開的版本控制系統
 - Docker 容器會自動重啟，除非明確停止
 
@@ -256,40 +207,3 @@ docker-compose ps
 - **找不到 Line 群組 ID**：在群組中發送測試訊息，查看應用程式日誌獲取 Group ID
 - **Docker 權限問題**：使用 `sudo usermod -aG docker $USER` 將用戶添加到 docker 群組
 - **依賴項問題**：如果更新後出現缺少依賴項錯誤，使用 `docker-compose build --no-cache` 重新構建容器
-
-## 高級使用
-
-### 自定義 Docker 配置
-
-如果您需要自定義 Docker 設定，可以編輯 `docker-compose.yml` 文件：
-```yaml
-version: '3'
-
-services:
-  line-discord-bot:
-    build: .
-    container_name: line-discord-bot
-    volumes:
-      - ./.env:/app/.env
-      - ./temp_images:/app/temp_images
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-    environment:
-      - PYTHONUNBUFFERED=1
-```
-
-### 備份設定
-
-定期備份您的 `.env` 文件和其他重要數據：
-```bash
-cp .env .env.backup
-```
-
-## 貢獻與支援
-
-歡迎提交 Issues 和 Pull Requests 來改進這個機器人。如有任何問題，請在 GitHub 上開 Issue。
-
-## 授權
-
-MIT
