@@ -10,6 +10,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request, abort
 from pathlib import Path
+import mimetypes  # 新增：用於推斷副檔名
 
 # Line Bot SDK v2
 from linebot import LineBotApi, WebhookHandler
@@ -320,15 +321,17 @@ def handle_sticker_message(event):
     send_to_discord(f"**{user_name}**:\n發送了一個貼圖 (貼圖ID: {sticker_id}, 包ID: {package_id})")
 
 @handler.add(MessageEvent, message=(VideoMessage, AudioMessage, FileMessage))
+
 def handle_media_message(event):
     """
-    處理 Line 影片、語音、檔案訊息，通知 Discord。
+    處理 Line 影片、語音、檔案訊息，若小於25MB則轉傳到 Discord，否則僅顯示文字。
     """
     user_id = event.source.user_id
     if line_bot_id and user_id == line_bot_id:
         logger.info("忽略Line機器人自己發送的媒體")
         return
     user_name = get_user_display_name(event)
+    # 判斷訊息類型
     if isinstance(event.message, VideoMessage):
         message_type = "影片"
     elif isinstance(event.message, AudioMessage):
@@ -337,7 +340,62 @@ def handle_media_message(event):
         message_type = "檔案"
     else:
         message_type = "媒體"
-    send_to_discord(f"**{user_name}**:\n發送了一個{message_type}")
+    # 嘗試下載檔案並判斷大小
+    message_id = event.message.id
+    try:
+        message_content = line_bot_api.get_message_content(message_id)
+        # FileMessage 用原始檔名，其餘類型用 MIME type 推斷副檔名
+        if isinstance(event.message, FileMessage) and hasattr(event.message, 'file_name'):
+            orig_name = event.message.file_name
+            file_path = TEMP_DIR / f"{uuid.uuid4()}_{orig_name}"
+        else:
+            # 嘗試從 message_content.headers 取得 Content-Type
+            mime_type = None
+            if hasattr(message_content, 'headers') and 'Content-Type' in message_content.headers:
+                mime_type = message_content.headers['Content-Type']
+            # 若無法取得，則 fallback 用 message_type
+            if not mime_type:
+                mime_type = {
+                    '影片': 'video/mp4',
+                    '語音': 'audio/m4a',
+                    '檔案': 'application/octet-stream',
+                    '媒體': 'application/octet-stream'
+                }.get(message_type, 'application/octet-stream')
+            ext = mimetypes.guess_extension(mime_type) or '.bin'
+            file_path = TEMP_DIR / f"{uuid.uuid4()}{ext}"
+        with open(file_path, 'wb') as fd:
+            for chunk in message_content.iter_content():
+                fd.write(chunk)
+        file_size = file_path.stat().st_size
+        max_size = 25 * 1024 * 1024  # 25MB
+        if file_size <= max_size:
+            send_media_to_discord(user_name, file_path, message_type)
+        else:
+            send_to_discord(f"**{user_name}**:\n發送了一個{message_type}（超過25MB，未轉傳）")
+            os.remove(file_path)
+    except Exception as e:
+        logger.error(f"處理{message_type}時發生錯誤: {e}")
+        send_to_discord(f"**{user_name}**:\n發送了一個{message_type}，但處理失敗: {str(e)}")
+
+def send_media_to_discord(user_name, file_path, message_type):
+    """
+    發送影片、語音、檔案等媒體到 Discord，發送後自動刪除暫存檔。
+    """
+    async def send_media():
+        try:
+            await discord_channel.send(f"**{user_name}**:\n發送了{message_type}", file=discord.File(str(file_path)))
+            os.remove(file_path)
+            logger.info(f"已成功發送{message_type}到Discord並刪除臨時文件: {file_path}")
+        except Exception as e:
+            logger.error(f"發送{message_type}到Discord時發生錯誤: {e}")
+    if discord_channel:
+        asyncio.run_coroutine_threadsafe(send_media(), bot.loop)
+    else:
+        logger.error("Discord頻道未初始化")
+        try:
+            os.remove(file_path)
+        except:
+            pass
 
 # =====================
 # 主程式入口
