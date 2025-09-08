@@ -20,6 +20,8 @@ import logging
 import uuid
 from pathlib import Path
 import json
+import pytz
+from datetime import datetime
 
 # 設定日誌
 logging.basicConfig(
@@ -27,6 +29,35 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# 修改 TimezoneFormatter 顯示時區名稱
+class TimezoneFormatter(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None, timezone=None):
+        super().__init__(fmt, datefmt)
+        self.timezone = timezone or pytz.utc
+
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, self.timezone)
+        tz_offset = dt.strftime('%z')
+        tz_offset_fmt = f"{tz_offset[:3]}:{tz_offset[3:]}" if tz_offset else ''
+        # 只顯示年月日時分秒
+        time_str = dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"{time_str} {tz_offset_fmt}({self.timezone.zone.lower()})"
+
+# 設定時區(此處為台北)
+taipei_timezone = pytz.timezone('Asia/Taipei')
+
+# 替換 logger 的 Formatter
+formatter = TimezoneFormatter(
+    fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    timezone=taipei_timezone
+)
+
+for handler in logger.handlers:
+    handler.setFormatter(formatter)
+
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(formatter)
 
 # 載入環境變數
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
