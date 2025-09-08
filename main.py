@@ -64,10 +64,13 @@ group_info_cache = {}
 TEMP_DIR = Path("temp_images")
 TEMP_DIR.mkdir(exist_ok=True)
 
+# 暫存未發送的訊息
+unsent_messages = []
+
 # 當Discord機器人準備好時的事件
 @bot.event
 async def on_ready():
-    global discord_channel, line_bot_id
+    global discord_channel, line_bot_id, unsent_messages
     logger.info(f'Discord Bot {bot.user} 已連接！')
     
     # 獲取指定的Discord頻道
@@ -95,6 +98,18 @@ async def on_ready():
         logger.warning(f"獲取Line機器人資訊時發生錯誤: {e}")
         line_bot_id = None
         logger.info("將繼續運行，但無法過濾機器人自己的訊息")
+    
+    # 重新發送暫存的訊息
+    if unsent_messages:
+        logger.info(f"重新發送 {len(unsent_messages)} 則暫存訊息")
+        for msg in unsent_messages:
+            try:
+                await discord_channel.send(msg)
+                logger.info(f"成功重新發送訊息: {msg}")
+            except Exception as e:
+                logger.error(f"重新發送訊息時發生錯誤: {e}")
+        # 清空暫存訊息
+        unsent_messages.clear()
 
 # 獲取用戶顯示名稱的函數
 def get_user_display_name(event):
@@ -281,11 +296,21 @@ def handle_media_message(event):
 
 # 傳送訊息到Discord的函數
 def send_to_discord(message):
+    global unsent_messages
     if discord_channel:
-        # 使用asyncio的run_coroutine_threadsafe來在Flask線程中調用Discord的異步函數
-        asyncio.run_coroutine_threadsafe(discord_channel.send(message), bot.loop)
+        try:
+            # 使用 asyncio 的 run_coroutine_threadsafe 發送訊息
+            asyncio.run_coroutine_threadsafe(discord_channel.send(message), bot.loop)
+            logger.info(f"成功發送訊息到 Discord: {message}")
+        except Exception as e:
+            logger.error(f"發送訊息到 Discord 時發生錯誤: {e}")
+            # 將未發送的訊息暫存
+            unsent_messages.append(message)
+            logger.info(f"訊息已暫存，等待重新發送: {message}")
     else:
-        logger.error("Discord頻道未初始化")
+        logger.error("Discord 頻道未初始化")
+        # 將未發送的訊息暫存
+        unsent_messages.append(message)
 
 # 傳送圖片到Discord的函數
 def send_image_to_discord(user_name, file_path):
