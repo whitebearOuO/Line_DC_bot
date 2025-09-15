@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, abort
 from pathlib import Path
 import mimetypes  # 新增：用於推斷副檔名
+from collections import deque
 
 # Line Bot SDK v2
 from linebot import LineBotApi, WebhookHandler
@@ -100,6 +101,8 @@ group_info_cache = {}   # 群組資訊快取
 TEMP_DIR = Path("temp_images")  # 圖片暫存目錄
 TEMP_DIR.mkdir(exist_ok=True)
 unsent_messages = []    # 暫存未發送訊息
+processed_message_ids = deque(maxlen=100)  # 自動限制大小的雙端佇列
+MAX_CACHE_SIZE = 100  # 最多保存100個訊息ID
 
 # =====================
 # 工具函數
@@ -254,11 +257,31 @@ def callback():
     signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
     logger.info("收到Line訊息: %s", body)
+    
+    # 檢查是否為重新發送的訊息
+    try:
+        import json
+        webhook_data = json.loads(body)
+        if 'events' in webhook_data and webhook_data['events']:
+            for event in webhook_data['events']:
+                # 檢查訊息ID是否已處理過
+                if 'message' in event and 'id' in event['message']:
+                    message_id = event['message']['id']
+                    if message_id in processed_message_ids:
+                        logger.info(f"跳過重複訊息 ID: {message_id}")
+                        return 'OK'  # 已處理過，直接返回成功
+                    
+                    # 添加新訊息ID到已處理集合
+                    processed_message_ids.append(message_id)
+    except Exception as e:
+        logger.error(f"解析訊息ID時發生錯誤: {e}")
+    
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         logger.error("無效的簽名")
         abort(400)
+    
     return 'OK'
 
 @app.route("/", methods=['GET', 'POST'])
@@ -559,20 +582,37 @@ async def say_line(interaction: discord.Interaction, message: str):
 # Line Webhook路由
 @app.route("/callback", methods=['POST'])
 def callback():
-    # 取得X-Line-Signature頭部值
+    """
+    Line Webhook 路由，處理來自 Line 的訊息。
+    """
     signature = request.headers['X-Line-Signature']
-
-    # 取得請求內容
     body = request.get_data(as_text=True)
     logger.info("收到Line訊息: %s", body)
-
+    
+    # 檢查是否為重新發送的訊息
     try:
-        # 驗證簽名
+        import json
+        webhook_data = json.loads(body)
+        if 'events' in webhook_data and webhook_data['events']:
+            for event in webhook_data['events']:
+                # 檢查訊息ID是否已處理過
+                if 'message' in event and 'id' in event['message']:
+                    message_id = event['message']['id']
+                    if message_id in processed_message_ids:
+                        logger.info(f"跳過重複訊息 ID: {message_id}")
+                        return 'OK'  # 已處理過，直接返回成功
+                    
+                    # 添加新訊息ID到已處理集合
+                    processed_message_ids.append(message_id)
+    except Exception as e:
+        logger.error(f"解析訊息ID時發生錯誤: {e}")
+    
+    try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         logger.error("無效的簽名")
         abort(400)
-
+    
     return 'OK'
 
 # 首頁路由
