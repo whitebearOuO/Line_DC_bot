@@ -11,7 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 複製應用程式代碼
 COPY main.py ./
-COPY .env.example ./.env.example
 
 # 建立臨時圖片資料夾
 RUN mkdir -p temp_images

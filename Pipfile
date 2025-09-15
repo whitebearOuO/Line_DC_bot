@@ -4,12 +4,13 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-discord-py = "*"
+py-cord = ">=2.0.0"
 line-bot-sdk = "*"
 flask = "*"
 python-dotenv = "*"
+pytz = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3"
+python_version = "3.9"
