@@ -1,6 +1,6 @@
 # Line-Discord 訊息轉發機器人
 > [!WARNING] 
->請注意這個bot是copilot（使用Claude Sonnet 3.7）跟我一起生的，因為我一直寫不好Line Bot🥲。<br>
+>請注意這個bot是copilot跟我一起生的，因為我一直寫不好Line Bot🥲。<br>
 >所以可能會有一些缺失，還請要使用的人見諒:]<br>
 <br>
 哇嗚好多群組都是用Line，但我真的好喜歡泡在DC而且不想在電腦上下載Line怎麼辦？<br>
